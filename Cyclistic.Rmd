@@ -1,0 +1,373 @@
+---
+title: "Cyclistic - Google Data Analytics Capstone Project"
+author: "Ishan Amin"
+date: '2022-05-09'
+output: pdf_document
+---
+
+# Background Information
+Cyclisitc is a bike-sharing company based out of Chicago. It currently offers 5824 bikes for its riders and has 692 mounting stations all across Chicago. The company offers three plans to its riders: The single-ride pass, full-day pass, and the annual membership.
+
+The company currently categorizes its customers into two segments, the annual members and the casual riders (those that use the single-ride and full-day passes). The Director of Marketing wants to make a strong push to maximize the number of annual memberships, as that is what he believes is the driving factor for the sucess of the company.
+
+
+# Ask
+### Business Objective 
+The main objective of the business is to covert casual riders to annual members in order to increase revenue.
+
+### Business Task
+In order to accomplish the business objective, Cyclistic must first understand the differences between their 2 customers.
+
+###Stakeholders
+
+Lily Moreno: Director of Marketing, responsible for the promotion of the bike sharing program through campaigns and initiatives.
+
+Analytics Team: Data Analysts who collect, analyse, and report data to help guide marketing decisions and strategy.
+
+Executive Team: Responsible for approving any recommendations that come out of this report.
+
+# Prepare
+
+To conduct this investigation, we will be using information from April 2021 to April 2022.
+
+The files have csv formatting with 13 columns:
+* ride_id: Unique ID for each ride.
+* rideable_type: Type of bicycle used (docked, electric, classical).
+* started_at: datetime of when the ride started.
+* ended_at: datetime of when the ride ended.
+* start_station_name: Name of the station where the customer started the ride.
+* start_station_id: ID of the station the rider picked up the bike.
+* end_station_name: Name of the station where the customer ended the ride.
+* end_station_id: ID of the station the rider dropped off the bike.
+* start_lat: Starting latitude of the ride.
+* start_lng: Starting longitude of the ride.
+* end_lat: Ending latitude of the ride.
+* end_lng: Ending longitude of the ride.
+* member_casual: Type of membership of the rider (member, casual)
+
+The data is located at the following link: https://divvy-tripdata.s3.amazonaws.com/index.html
+
+
+The data was collected by Motivate International Inc. and is available for public use. However, as per the licensing agreement (https://ride.divvybikes.com/data-license-agreement), all identifiable information has been removed from the data set. This poses several challenges, the first being that we won't be able to identify any demographic information about the riders, making it harder to market to a specific target audience. It also hinders the investigation considerably as it will not allow us to determine how frequently casual riders use the services, or if they live in the Chicago area.
+
+# Process
+
+Loading the packages:
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(lubridate)
+library(skimr)
+library(janitor)
+library(mapview)
+```
+
+Loading the data:
+
+```{r}
+Apr_22 <- read_csv("202204-divvy-tripdata.csv")
+Mar_22 <- read_csv("202203-divvy-tripdata.csv")
+Feb_22 <- read_csv("202202-divvy-tripdata.csv")
+Jan_22 <- read_csv("202201-divvy-tripdata.csv")
+Dec_21 <- read_csv("202112-divvy-tripdata.csv")  
+Nov_21 <- read_csv("202111-divvy-tripdata.csv")
+Oct_21 <- read_csv("202110-divvy-tripdata.csv")
+Sep_21 <- read_csv("202109-divvy-tripdata.csv")
+Aug_21 <- read_csv("202108-divvy-tripdata.csv")
+Jul_21 <- read_csv("202107-divvy-tripdata.csv")
+Jun_21 <- read_csv("202106-divvy-tripdata.csv")  
+May_21 <- read_csv("202105-divvy-tripdata.csv")
+```
+
+To make sure all the column names are the same, we compare the columns of each of the data frames:
+
+```{r}
+compare_df_cols(May_21,Jun_21,Jul_21,Aug_21,Sep_21,Oct_21,Nov_21,Dec_21,Jan_22,Mar_22,Apr_22)
+```
+
+As all the column names are the same, and all data frames match the type, the data frames were combined into one.
+
+```{r}
+trips <- bind_rows(May_21,Jun_21,Jul_21,Aug_21,Sep_21,Oct_21,Nov_21,Dec_21,Jan_22,Mar_22,Apr_22)
+glimpse(trips)
+```
+
+Remove all the data with empty rows and columns
+```{r}
+trips = trips %>% 
+  remove_empty(which = c("cols", "rows"))
+
+```
+
+
+Checking for duplicates:
+```{r}
+#get_dupes(trips,ride_id)
+```
+No duplicates to report.
+
+The company also conducts testing on their docking stations. The following code ensures that the tests are not a part of the analysis.
+
+Renamed columns for better comprehension:
+
+```{r}
+trips = trips %>% 
+  rename(
+    bike_type = rideable_type,
+    user_type = member_casual
+  ) %>%
+  mutate(
+    bike_type = as_factor(bike_type),
+    user_type = as_factor(user_type)
+  )
+
+```
+
+To see how many null values there are in the data set.
+
+```{r}
+colSums(is.na(trips))
+```
+
+From this we can see that there is an alarming number of missing values for both the start stations and the end stations. Out of the 5,641,942 unique bike rides over the past 12 months, it is unclear where 13.67% of rides originated from and where 14.58% of the rides ended. 
+
+In terms of the end latitude and longitude, it can be assumed that the riders did not return their bikes to the station, and as such the longitude and latitude was not registered.
+
+
+
+To determine what time riders most often use the bike, I created new columns to better understand and track this data. I also created a column to track the amount of time, in minutes, each ride lasted.
+
+```{r}
+trips = trips %>% 
+  mutate(
+    hour_start = hour(started_at),
+    weekday = wday(started_at, label = T, abbr = F),
+    month = month(started_at, label = T, abbr =F),
+    day = day(started_at),
+    duration = difftime(ended_at, started_at, units = "mins")
+  )
+
+glimpse(trips)
+
+```
+
+Furthermore, logic dictates that no trip can be under 0 minutes, as such a  filter was created to remove bad data collection:
+
+```{r}
+trips = filter(trips,duration > 0)
+```
+
+Finally, a descriptive analysis is conducted on the dataframe:
+
+```{r}
+str(trips)
+```
+
+```{r}
+summary(trips)
+```
+
+```{r}
+skim_without_charts(trips)
+```
+The two most important factors to consider when conducting the analysis is the time and location of the rides, this is probably the most important information that we have from the data provided. 
+
+In order to further analyse these aspects of the data, we can create two additional data frames.
+
+```{r}
+time_trips = trips %>%
+  select(ride_id, user_type, bike_type, hour_start, weekday, month, day, duration)
+
+colSums(is.na(time_trips))
+```
+
+```{r}
+location_trips = trips %>% 
+  drop_na(start_station_name, end_station_name) %>% 
+  drop_na(end_lat,end_lng) %>%
+  select(ride_id, start_station_name, end_station_name, start_lat, start_lng, end_lat, end_lng, user_type, duration)
+
+colSums(is.na(location_trips))
+```
+
+# Analyse and Share
+
+## Time Analysis
+
+
+To determine how long the casual riders rode bikes compared to the members, I first obtained summary statistics on the duration of the trips.
+```{r}
+mean(time_trips$duration)
+median(time_trips$duration)
+max(time_trips$duration)
+min(time_trips$duration)
+```
+
+Comparing members and casual riders
+
+```{r}
+aggregate(time_trips$duration ~ time_trips$user_type, FUN = mean)
+aggregate(time_trips$duration ~ time_trips$user_type, FUN = median)
+aggregate(time_trips$duration ~ time_trips$user_type, FUN = max)
+aggregate(time_trips$duration ~ time_trips$user_type, FUN = min)
+```
+
+
+
+The average ride time by each day for members vs casual users
+
+```{r}
+aggregate(time_trips$duration ~ time_trips$user_type + time_trips$weekday, FUN = mean)
+```
+Analyze ridership data by type and weekday
+```{r}
+time_trips %>%
+  group_by(user_type, weekday) %>%  #groups by usertype and weekday
+  summarise(number_of_rides = n()							#calculates the number of rides and average duration 
+  ,average_duration = mean(duration)) 		# calculates the average duration								# sorts
+
+```
+
+```{r}
+
+time_trips %>% 
+  group_by(user_type, hour_start) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(duration)) %>% 
+  ggplot(aes(x = hour_start, y = number_of_rides, fill = user_type)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Number of Rides by Hour of the Day",
+    x = "Day of the Week",
+    y = "Number of Rides"
+  )
+
+
+```
+Casual members are more active between late mornings and early evenings.
+
+```{r}
+
+time_trips %>% 
+  group_by(user_type, weekday) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(duration)) %>% 
+  ggplot(aes(x = weekday, y = number_of_rides, fill = user_type)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Number of Rides by Day of the Week",
+    x = "Day of the Week",
+    y = "Number of Rides"
+  )
+
+```
+From this graph, it is evident that casual riders use Cyclistic's bikes on the weekend more than the weekdays. Members and casual riders have a inverse relationship in terms of bike usage throughout the week.
+
+```{r}
+
+time_trips %>% 
+  group_by(user_type, month) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(duration)) %>% 
+  ggplot(aes(x = month, y = number_of_rides, fill = user_type)) +
+  geom_col(position = "dodge") +
+  labs(title = "Number of Rides by Day of the Month", x = "Month",y = "Number of Rides") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+The distribution of both casual riders and members follows a normal distribution as it relates to the number of rides taken throughout the year. Casual riders ride more than members in the summer months: June, July, and August. This may due to an influx of tourists in the area, and their desire to explore city on bike.
+
+```{r}
+
+time_trips %>% 
+  group_by(user_type, bike_type) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(duration)) %>% 
+  ggplot(aes(x = user_type, y = number_of_rides, fill = bike_type)) +
+  geom_bar(position = "stack", stat = "identity") +
+  labs(
+    title = "Number of Rides by Type of Bike",
+    x = "Type of Bike",
+    y = "Number of Rides"
+  )
+
+```
+From this we can see that both groups have a preference for classic bikes, with electric bikes being a close second. However, we see that few casual riders choose docked bikes, and no members like docked bikes.
+
+## Location Analysis
+
+```{r}
+location_trips [1:100, ] %>%
+  group_by(user_type, start_station_name, start_lat, start_lng) %>%
+  summarise(number_of_rides = n()) %>%
+  ggplot(aes(start_station_name, number_of_rides, fill = user_type))+
+  geom_col(position = "dodge")+
+  coord_flip()+
+  labs(
+    title = "Most Popular Start Stations",
+    x = "Station Name",
+    y = "Number of Trips")
+
+
+location_trips[1:100, ] %>%
+  group_by(user_type, start_station_name, start_lat, start_lng) %>%
+  summarise(number_of_rides = n()) %>%
+  mapview(
+    xcol = "start_lng", 
+        ycol = "start_lat",
+        cex = "number_of_rides",
+        alpha = 0.9, 
+        crs = 4269,
+        color = "#8b0000",
+        grid = F, 
+        legend = T
+  )
+
+```
+
+```{r}
+
+location_trips [1:100, ] %>%
+  group_by(user_type, end_station_name, end_lat, end_lng) %>%
+  summarise(number_of_rides = n()) %>%
+  ggplot(aes(end_station_name, number_of_rides, fill = user_type))+
+  geom_col(position = "dodge")+
+  coord_flip()+
+  labs(
+    title = "Most Popular End Stations",
+    x = "Station Name",
+    y = "Number of Trips")
+
+
+location_trips[1:100, ] %>%
+  group_by(user_type, end_station_name, end_lat, end_lng) %>%
+  summarise(number_of_rides = n()) %>%
+  mapview(
+    xcol = "end_lng", 
+        ycol = "end_lat",
+        cex = "number_of_rides",
+        alpha = 0.9, 
+        crs = 4269,
+        color = "#8b0000",
+        grid = F, 
+        legend = T
+  )
+
+```
+
+From the charts above, we see that the most active station for casual riders is the one located on Michigan Ave & Oak Street. We can also see that most of the locations for casual riders are near Lake Michigan.
+
+# Act
+## Reccomendations
+
+Due to the lack of demographic information, it was difficult to determine how to specifically target the casual riders. However, the ride data did provide some insight into how the casual riders differed from the members, and how that can be used to market to them.
+
+1. Cyclistic should increase advertisments around the Chicago Lake Front. From my analysis, the station on Michigan Ave & Oak Street recieved a lot of footfall from casual riders. 
+2. Cyclistic should ramp adverstisments during the summer months, namely June, July, August, and September. These are when casual riders are the most active.
+3. Only casual riders opt to use the docked bikes, interestingly, some of the longest trips in the data set are a result of the docked bikes. As such Cyclistic should create membership packages that would appeal to those who take longer bike rides.
+
+
+```{r}
+write_csv(trips, "all_trips.csv")
+```
